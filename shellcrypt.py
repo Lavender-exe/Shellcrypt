@@ -72,7 +72,9 @@ OUTPUT_FORMATS = [
     "vba",
     "vbscript",
     "raw",
-    "rust"
+    "rust",
+    "js",
+    "zig"
 ]
 
 
@@ -147,7 +149,9 @@ class ShellcodeFormatter:
             "vba": self.__output_vba,
             "vbscript": self.__output_vbscript,
             "raw": self.__output_raw,
-            "rust": self.__output_rust
+            "rust": self.__output_rust,
+            "js": self.__output_js,
+            "zig": self.__output_zig
         }
 
     def __generate_array_contents(self, input_bytes: bytearray, string_format=False) -> str:
@@ -235,6 +239,25 @@ class ShellcodeFormatter:
             output += f"{array_name}="
             output += "".join([f"Chr({str(c)})&" for c in array])[:-1]
             output += "\n\n"
+        return output
+
+    def __output_js(self, arrays: dict) -> str:
+        """JavaScript output."""
+        output = ""
+        for array_name, array in arrays.items():
+            output += f"const {array_name} = new Uint8Array({len(array)}); \n"
+            output += f"{array_name}.set(["
+            output += self.__generate_array_contents(array)
+            output += "]);\n\n"
+        return output
+
+    def __output_zig(self, arrays: dict) -> str:
+        """Zig output."""
+        output = ""
+        for array_name, array in arrays.items():
+            output += f"var {array_name} = []u8{{\n"
+            output += self.__generate_array_contents(array)
+            output += "\n};\n\n"
         return output
 
     def __output_raw(self, arrays: dict) -> str:
