@@ -360,7 +360,7 @@ class Encrypt:
         :param plaintext: bytearray containing plaintext
         :return ciphertext: bytearray containing encrypted plaintext
         """
-        salsa20_cipher = Salsa20.new(key=key)
+        salsa20_cipher = Salsa20.new(key=self.key)
         return salsa20_cipher.encrypt(plaintext)
 
     def __aes_ecb(self, plaintext:bytearray) -> bytearray:
