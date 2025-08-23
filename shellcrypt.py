@@ -9,6 +9,7 @@ import base64
 import logging
 import os
 import pyfiglet
+import random
 
 from rich.console import Console
 from rich.theme import Theme
@@ -285,6 +286,8 @@ class Encrypt:
         return
 
     def __random_key(self) -> int:
+        self.seed = random.randint(0, 2**32 - 1)  
+        
         LCG_A = 1664525  # Multiplier
         LCG_C = 1013904223  # Increment
         LCG_M = 2**32  # Modulus (2^32)
