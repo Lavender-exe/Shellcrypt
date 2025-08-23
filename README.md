@@ -37,6 +37,8 @@ Shellcrypt currently supports the following output formats (more to come in the 
 - Visual Basic for Applications (VBA)
 - Visual Basic Script (VBS)
 - Rust
+- Javascript
+- Zig
 - Raw
 
 ## Usage 
