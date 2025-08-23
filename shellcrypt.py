@@ -99,7 +99,7 @@ COMPRESSION = [
     "rle",
 ]
 
-VERSION = "v1.4"
+VERSION = "v2.0 - Release"
 
 def show_banner():
     banner = pyfiglet.figlet_format("Shellcrypt", font="slant", justify="left")

@@ -76,6 +76,7 @@ python ./shellcrypt.py --ciphers
 ```bash
 python ./shellcrypt.py --formats
 ```
+
 **Help**
 ```plaintext
    _____ __         ____                      __
@@ -84,7 +85,7 @@ python ./shellcrypt.py --formats
  ___/ / / / /  __/ / / /__/ /  / /_/ / /_/ / /_
 /____/_/ /_/\___/_/_/\___/_/   \__, / .___/\__/
                               /____/_/
-v1.4
+v2.0 - Release
 
 By: @0xLegacyy (Jordan Jay)
 
