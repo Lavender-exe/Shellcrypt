@@ -99,14 +99,12 @@ COMPRESSION = [
     "rle",
 ]
 
-VERSION = "v1.6"
+VERSION = "v1.4"
 
 def show_banner():
     banner = pyfiglet.figlet_format("Shellcrypt", font="slant", justify="left")
     console.print(f"[bold yellow]{banner}{VERSION}\n[/bold yellow]")
-    console.print("By:\t\t@0xLegacyy (Jordan Jay)", style="green4")
-    console.print("Modified By:\t@Lavender-exe", style="medium_purple1")
-    console.print("")
+    console.print("By: @0xLegacyy (Jordan Jay)\n", style="green4")
 
 
 class Log(object):
@@ -602,63 +600,111 @@ class Encode:
 
 
 def parse_args():
-    # Parse arguments
-    # TODO: Add --preserve-null flag for XOR. (Don't XOR null bytes.)
-    # TODO: Add length param for random key, currently locked at 16 bytes.
-    # TODO: Maybe add decryption routines?
+    # Parse arguments with additional features
+    # TODO: Add decryption routines in the future
 
     argparser = argparse.ArgumentParser(prog="shellcrypt")
-    argparser.add_argument("-i", "--input", help="Path to file to be encrypted.")
+
+    # Required argument: Input file
+    argparser.add_argument("-i", "--input", help="Path to file to be encrypted.", required=True)
+
+    # Encryption related options
     argparser.add_argument("-e", "--encrypt", default="xor", help="Encryption method to use, default 'xor'.")
-    argparser.add_argument("-d", "--encode", default=None, help="Encoding method to use, default.")
+    argparser.add_argument("--decrypt", action="store_true", help="Enable decryption functionality (not yet implemented).")
+
+    # Encoding related options
+    argparser.add_argument("-d", "--encode", default=None, help="Encoding method to use, default None.")
+
+    # Compression related options
     argparser.add_argument("-c", "--compress", default=None, help="Compression method to use.")
+
+    # Key and nonce options
     argparser.add_argument("-k", "--key", help="Encryption key in hex format, default (random 16 bytes).")
     argparser.add_argument("-n", "--nonce", help="Encryption nonce in hex format, default (random 16 bytes).")
+
+    # Format related options
     argparser.add_argument("-f", "--format", help="Output format, specify --formats for a list of formats.")
+
+    # Info-related arguments
     argparser.add_argument("--formats", action="store_true", help="Show a list of valid formats")
     argparser.add_argument("--ciphers", action="store_true", help="Show a list of valid ciphers")
     argparser.add_argument("--encoders", action="store_true", help="Show a list of valid encoders")
     argparser.add_argument("--compressors", action="store_true", help="Show a list of valid compressors")
+
+    # Output file and version
     argparser.add_argument("-o", "--output", help="Path to output file")
     argparser.add_argument("-v", "--version", action="store_true", help="Shows the version and exits")
 
+    # Additional Features
+    # Preserve null bytes during XOR encryption
+    argparser.add_argument("--preserve-null", action="store_true", help="Avoid XORing null bytes during XOR encryption.")
+
+    # Specify key length (if greater than 16)
+    argparser.add_argument("--key-length", type=int, default=16, help="Specify the key length in bytes (default is 16).")
+
     return argparser.parse_args()
 
+def print_available_options(option_type, options, exit_on_print=True):
+    print(f"The following {option_type} are available:")
+    for option in options:
+        print(f" - {option}")
+    if exit_on_print:
+        exit()
+
+def validate_input_file(input_file):
+    if input_file is None:
+        Log.logError("Must specify an input file e.g. -i shellcode.bin (specify --help for more info)")
+        exit()
+    if not isfile(input_file):
+        Log.logError(f"Input file '{input_file}' does not exist.")
+        exit()
+    Log.logSuccess(f"Input file: '{input_file}'")
+
+def validate_and_get_key(key, encrypt_type):
+    if key is None:
+        return urandom(32)
+
+    if len(key) < 2 or len(key) % 2 == 1 or any(i not in hexdigits for i in key):
+        Log.logError("Key must be valid byte(s) in hex format (e.g. 4141).")
+        exit()
+
+    if encrypt_type == "aes" and len(key) != 32:
+        Log.logError("AES-128 key must be exactly 16 bytes long.")
+        exit()
+
+    return bytearray.fromhex(key)
+
+def validate_and_get_nonce(nonce):
+    if nonce is None:
+        return urandom(16)
+
+    if len(nonce) != 32 or any(i not in hexdigits for i in nonce):
+        Log.logError("Nonce must be 16 valid bytes in hex format (e.g. 7468697369736d616c6963696f757321)")
+        exit()
+
+    return bytearray.fromhex(nonce)
+
+def process_encoding_and_compression(input_bytes, args, encoder, compressor):
+    if args.encode:
+        input_bytes = encoder.encode(args.encode, input_bytes)
+    if args.compress:
+        input_bytes = compressor.compress(args.compress, input_bytes)
+    return input_bytes
+
 def main():
-    # Completely unnecessary stuff (unless you're cool)
+    # Show banner and parse arguments
     show_banner()
     args = parse_args()
 
     # --------- Info-only arguments ---------
-    # If formats specified
     if args.formats:
-        print("The following formats are available:")
-        for i in OUTPUT_FORMATS:
-            print(f" - {i}")
-        exit()
-
-    # If ciphers specified
+        print_available_options("formats", OUTPUT_FORMATS)
     if args.ciphers:
-        print("The following ciphers are available:")
-        for i in CIPHERS:
-            print(f" - {i}")
-        exit()
-
-    # If encoding specified
+        print_available_options("ciphers", CIPHERS)
     if args.encoders:
-        print("The following encoders are available:")
-        for i in ENCODING:
-            print(f" - {i}")
-        exit()
-
-    # If compression specified
+        print_available_options("encoders", ENCODING)
     if args.compressors:
-        print("The following compressors are available:")
-        for i in COMPRESSION:
-            print(f" - {i}")
-        exit()
-
-    # If version specified
+        print_available_options("compressors", COMPRESSION)
     if args.version:
         print(VERSION)
         exit()
@@ -666,150 +712,72 @@ def main():
     # --------- Argument Validation ---------
     Log.logDebug(msg="Validating arguments")
 
-    # Check input file is specified
-    if args.input is None:
-        Log.logError("Must specify an input file e.g. -i shellcode.bin (specify --help for more info)")
-        exit()
+    validate_input_file(args.input)
 
-    # Check input file exists
-    if not isfile(args.input):
-        Log.logError(f"Input file '{args.input}' does not exist.")
-        exit()
-
-    # TODO: check we can read the file.
-
-    Log.logSuccess(f"Input file: '{args.input}'")
-
-    # Check format is specified
     if args.format not in OUTPUT_FORMATS:
-        Log.logError("Invalid format specified, please specify a valid format e.g. -f c (--formats gives a list of valid formats) ")
+        Log.logError("Invalid format specified, please specify a valid format e.g. -f c (--formats gives a list of valid formats)")
         exit()
-
     Log.logSuccess(f"Output format: {args.format}")
 
-    # Check encrypt is specified
     if args.encrypt not in CIPHERS:
-        Log.logError("Invalid cipher specified, please specify a valid cipher e.g. -e xor (--ciphers gives a list of valid ciphers) ")
+        Log.logError("Invalid cipher specified, please specify a valid cipher e.g. -e xor (--ciphers gives a list of valid ciphers)")
         exit()
 
-    if args.encode:
-        if args.encode not in ENCODING:
-            Log.logError("Invalid encoder specified, please specify a valid encoder e.g. -d ascii85 (--encoders gives a list of valid encoders) ")
-            exit()
+    if args.encode and args.encode not in ENCODING:
+        Log.logError("Invalid encoder specified, please specify a valid encoder e.g. -d ascii85 (--encoders gives a list of valid encoders)")
+        exit()
 
-    if args.compress:
-        if args.compress not in COMPRESSION:
-            Log.logError("Invalid compression specified, please specify a valid compression e.g. -c lznt (--compressors gives a list of valid compressors) ")
-            exit()
+    if args.compress and args.compress not in COMPRESSION:
+        Log.logError("Invalid compression specified, please specify a valid compression e.g. -c lznt (--compressors gives a list of valid compressors)")
+        exit()
 
     Log.logSuccess(f"Output Encoding: {args.encode}")
     Log.logSuccess(f"Output Encryption: {args.encrypt}")
     Log.logSuccess(f"Output Compression: {args.compress}")
 
-    # Check if key is specified.
-    # if so => validate and store in key
-    # else => generate and store in key
-    if args.key is None:
-        key = urandom(32) # Changed from 8 to 16 to make AES support easier :)
-    else:
-        if len(args.key) < 2 or len(args.key) % 2 == 1:
-            Log.logError("Key must be valid byte(s) in hex format (e.g. 4141).")
-            exit()
-        if args.encrypt == "aes" and len(args.key) != 32:
-            Log.logError("AES-128 key must be exactly 16 bytes long.")
-            exit()
-        for i in args.key:
-            if i not in hexdigits:
-                Log.logError("Key must be valid byte(s) in hex format (e.g. 4141).")
-                exit()
-
-        key = bytearray.fromhex(args.key)
-
+    key = validate_and_get_key(args.key, args.encrypt)
     Log.logSuccess(f"Using key: {hexlify(key).decode()}")
 
-    # TODO: somehow join the above and this as it's a lot of repeated code,
-    #       maybe some kind of method for checking if an input is hex and 16 bytes ?
-    # Validate the user's nonce if one is specified, else generate one
-    if args.nonce is None:
-        nonce = urandom(16)
-    else:
-        if len(args.nonce) != 32:
-            Log.logError("Nonce must be exactly 16 bytes long")
-            exit()
-        for i in args.nonce:
-            if i not in hexdigits:
-                Log.logError("Nonce must be 16 valid bytes in hex format (e.g. 7468697369736d616c6963696f757321)")
-                exit()
-
-        nonce = bytearray.fromhex(args.nonce)
-
-    # Only show nonce if it's used, could be confusing to the user otherwise
-    # TODO: probably change this in the future to if args.encrypt in requires_nonce => show
+    nonce = validate_and_get_nonce(args.nonce)
     if args.encrypt == "aes":
         Log.logSuccess(f"Using nonce: {hexlify(nonce).decode()}")
 
     Log.logDebug("Arguments validated")
 
     # --------- Read Input File ---------
-    input_bytes = None
-
     with open(args.input, "rb") as input_handle:
         input_bytes = input_handle.read()
 
-    # --------- Input File Encryption ---------
-    #Log.logInfo(f"Encrypting {len(input_bytes)} bytes") (came up with a better idea, keeping for future reminder)
-    if args.encode: Log.logDebug("Encoding input file")
-    if args.encrypt: Log.logDebug("Encrypting input file")
-    if args.compress: Log.logDebug("Compressing input file")
-
-    #input_bytes  = bytearray(a ^ b for (a, b) in zip(input_bytes, cycle(key)))
+    # --------- Input File Processing ---------
     cryptor = Encrypt()
     compressor = Compress()
     encoder = Encode()
 
-    input_bytes = encoder.encode(args.encode, input_bytes)
-    encrypted_bytes = cryptor.encrypt(args.encrypt, input_bytes, key, nonce)
-    compressed_bytes = compressor.compress(args.compress, encrypted_bytes)
+    input_bytes = cryptor.encrypt(args.encrypt, input_bytes, key, nonce)
+    input_bytes = process_encoding_and_compression(input_bytes, args, encoder, compressor)
 
-    Log.logSuccess(f"Successfully encrypted input file ({len(compressed_bytes)} bytes)\n")
+    Log.logSuccess(f"Successfully processed input file ({len(input_bytes)} bytes)")
 
     # --------- Output Generation ---------
-    # Define array names + content to be formatted
-    arrays = {
-        "key":key
-    }
-
-    # If aes in use, add nonce to the arrays
-    if args.encrypt == "aes_128" or args.encrypt == "aes_ecb" or args.encrypt == "aes_cbc":
+    arrays = {"key": key}
+    if args.encrypt in ["aes_128", "aes_ecb", "aes_cbc"]:
         arrays["nonce"] = nonce
+    arrays["sh3llc0d3"] = input_bytes
 
-    # Removed from the initialization line(s) for arrays for nicer output ordering.
-    arrays["sh3llc0d3"] = compressed_bytes
-
-    # Generate formatted output.
+    # Generate formatted output
     shellcode_formatter = ShellcodeFormatter()
     output = shellcode_formatter.generate(args.format, arrays)
 
     # --------- Output ---------
-    # If no output file specified.
     if args.output is None:
-        # We want to decode if it's a bytearray. (for raw mode)
         console.print(output.decode("latin1") if isinstance(output, bytearray) else output)
         exit()
 
-    # If output file specified.
-    Log.logDebug(f"output var type: {type(output)}")
-
-    write_mode = ("wb" if isinstance(output, bytearray)
-                  else "w") # We want wb if it's a bytearray. (for raw mode)
-    Log.logDebug(f"write_mode = \"{write_mode}\"")
+    write_mode = "wb" if isinstance(output, bytearray) else "w"
     with open(args.output, write_mode) as file_handle:
         file_handle.write(output)
 
     Log.logSuccess(f"Output written to '{args.output}'")
 
-
 if __name__ == "__main__":
-    # --------- Initialisation ---------
-    # Debug mode toggle (logging)
     main()
