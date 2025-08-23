@@ -107,85 +107,51 @@ def show_banner():
     console.print("By: @0xLegacyy (Jordan Jay)\n", style="green4")
 
 
-class Log(object):
-    """ Handles all styled terminal output. """
+class Log:
+    """Handles all styled terminal output."""
     def __init__(self):
-        super(Log, self).__init__()
-        return
+        pass
 
     def logSuccess(msg: str):
-        """ Logs msg to the terminal with a green [+] appended.
-            Used to show task success.
-        :param msg: User-specified message to be output
-        :return:
-        """
+        """Logs msg to the terminal with a green [+] appended. Used to show task success."""
         return logger.debug(f"[+] {msg}")
-        # return console.print(f"[+] {msg}", style="success")
 
     def logInfo(msg: str):
-        """ Logs msg to the terminal with a blue [*] appended
-            Used to show task status / info.
-        :param msg: User-specified message to be output
-        :return:
-        """
+        """Logs msg to the terminal with a blue [*] appended. Used to show task status / info."""
         return logger.info(f"[!] {msg}")
-        # return console.print(f"[!] {msg}", style="info")
 
     def logDebug(msg: str):
-        """ Logs msg to the terminal with a magenta [debug] appended
-            Used to show debug info for nerds.
-        :param msg: User-specified message to be output
-        :return:
-        """
+        """Logs msg to the terminal with a magenta [debug] appended. Used for debug info."""
         if DEBUG:
-            return logger.debug(msg=f"[+] {msg}")
-            # return console.print(f"[*] {msg}", style="yellow3")
+            return logger.debug(f"[+] {msg}")
 
     def logError(msg: str):
-        """ Logs msg to the terminal with a red [!] appended
-            Used to show error messages.
-        :param msg: User-specified message to be output
-        :return:
-        """
+        """Logs msg to the terminal with a red [!] appended. Used for error messages."""
         return logger.error(f"[-] {msg}")
-        # return console.print(f"[-] {msg}", style="error")
 
     def log_exception(msg: str):
-        """ Logs msg to the terminal with a red [!!] appended
-            Used to show error messages.
-        :param msg: User-specified message to be output
-        :return:
-        """
+        """Logs msg to the terminal with a red [!!] appended. Used to show error messages."""
         return logger.exception(f"[!!] {msg}")
 
 
-class ShellcodeFormatter(object):
-    """ Enables for easy output generation in multiple formats. """
+class ShellcodeFormatter:
+    """Generates shellcode output in various formats."""
     def __init__(self):
-        super(ShellcodeFormatter, self).__init__()
         self.__format_handlers = {
-            "c":        self.__output_c,
-            "csharp":   self.__output_csharp,
-            "nim":      self.__output_nim,
-            "go":       self.__output_go,
-            "py":       self.__output_py,
-            "ps1":      self.__output_ps1,
-            "vba":      self.__output_vba,
+            "c": self.__output_c,
+            "csharp": self.__output_csharp,
+            "nim": self.__output_nim,
+            "go": self.__output_go,
+            "py": self.__output_py,
+            "ps1": self.__output_ps1,
+            "vba": self.__output_vba,
             "vbscript": self.__output_vbscript,
-            "raw":      self.__output_raw,
-            "rust":     self.__output_rust
+            "raw": self.__output_raw,
+            "rust": self.__output_rust
         }
-        return
 
-    def __generate_array_contents(self, input_bytes:bytearray, string_format:bool=False) -> str:
-        """ Takes a byte array, and generates a string in format
-            0xaa,0xff,0xab(up to 15),
-            0x4f...
-        :param input_bytes: bytearray
-        :param string_format: Whether to print in the \xff format or 0xff
-        :return: string containing formatted array contents
-        """
-        # TODO: Rework this to support more languages than just those that use the 0x format
+    def __generate_array_contents(self, input_bytes: bytearray, string_format=False) -> str:
+        """Generates formatted shellcode from bytearray."""
         output = ""
         if not string_format:
             for i in range(len(input_bytes) - 1):
@@ -193,172 +159,90 @@ class ShellcodeFormatter(object):
                     output += "\n\t"
                 output += f"0x{input_bytes[i]:0>2x},"
             output += f"0x{input_bytes[-1]:0>2x}"
-            return output[1:] # (strip first \n)
+            return output[1:]
         else:
             for i in range(len(input_bytes) - 1):
                 if i % 15 == 0:
                     output += "\n"
                 output += f"\\x{input_bytes[i]:0>2x}"
             output += f"\\x{input_bytes[-1]:0>2x}"
-            return output[1:] # (strip first \n)
+            return output[1:]
 
-    def __output_c(self, arrays:dict) -> str:
-        """ Private method to output in C format.
-        :param arrays: dictionary containing array names and their respective bytes
-        :return output: string containing shellcode in c format, similar
-                        to msfvenom's csharp format.
-        """
-        # Generate arrays
-        output = str()
-        for array_name in arrays:
-            output += f"unsigned char {array_name}[{len(arrays[array_name])}] = {{\n"
-            output += self.__generate_array_contents(arrays[array_name])
+    def __output_format(self, arrays: dict, template: str, array_format="unsigned char") -> str:
+        """Generate shellcode in specified format."""
+        output = ""
+        for array_name, array in arrays.items():
+            output += f"{array_format} {array_name}[{len(array)}] = {{\n"
+            output += self.__generate_array_contents(array)
             output += "\n};\n\n"
-
         return output
 
-    def __output_rust(self, arrays:dict) -> str:
-        """ Private method to output in Rust format.
-        :param arrays: dictionary containing array names and their respective bytes
-        :return output: string containing shellcode in rust format, similar
-                        to msfvenom's rust format.
-        """
-        # Generate arrays
-        output = str()
-        for array_name in arrays:
-            output += f"let {array_name}: [u8; {len(arrays[array_name])}] = [\n"
-            output += self.__generate_array_contents(arrays[array_name])
-            output += "\n];\n\n"
+    def __output_c(self, arrays: dict) -> str:
+        return self.__output_format(arrays, "c")
 
-        return output
+    def __output_rust(self, arrays: dict) -> str:
+        return self.__output_format(arrays, "rust", array_format="let")
 
-    def __output_csharp(self, arrays:dict) -> str:
-        """ Private method to output in C# format.
-        :param arrays: dictionary containing array names and their respective bytes
-        :return output: string containing shellcode in C# format
-        """
-        # Generate arrays
-        output = str()
-        for array_name in arrays:
-            output += f"byte[] {array_name} = new byte[{len(arrays[array_name])}] {{\n"
-            output += self.__generate_array_contents(arrays[array_name])
-            output += "\n};\n\n"
+    def __output_csharp(self, arrays: dict) -> str:
+        return self.__output_format(arrays, "csharp", array_format="byte[]")
 
-        return output
-
-    def __output_nim(self, arrays:dict) -> str:
-        """ Private method to output in nim format.
-        :param arrays: dictionary containing array names and their respective bytes
-        :return output: string containing shellcode in nim format
-        """
-        # Generate arrays
-        output = str()
-        for array_name in arrays:
-            output += f"var {array_name}: array[{len(arrays[array_name])}, byte] = [\n"
-            output += "\tbyte " + self.__generate_array_contents(arrays[array_name])[1:]
+    def __output_nim(self, arrays: dict) -> str:
+        output = ""
+        for array_name, array in arrays.items():
+            output += f"var {array_name}: array[{len(array)}, byte] = [\n"
+            output += "\tbyte " + self.__generate_array_contents(array)[1:]
             output += "\n]\n\n"
         return output
 
-    def __output_go(self, arrays:dict) -> str:
-        """ Private method to output in golang format.
-        :param arrays: dictionary containing array names and their respective bytes
-        :return output: string containing shellcode in golang format
-        """
-        # Generate arrays
-        output = str()
-        for array_name in arrays:
-            output += f"{array_name} := []byte{{\n"
-            output += self.__generate_array_contents(arrays[array_name])
-            output += "\n};\n\n"
-        return output
+    def __output_go(self, arrays: dict) -> str:
+        return self.__output_format(arrays, "go", array_format="[]byte")
 
-    def __output_py(self, arrays:dict) -> str:
-        """ Private method to output in python format.
-        :param arrays: dictionary containing array names and their respective bytes
-        :return output: string containing shellcode in python format
-        """
-        # Note: Technically not best to use the triple quotes here but consistency ig
-        # Generate arrays
-        output = str()
-        for array_name in arrays:
+    def __output_py(self, arrays: dict) -> str:
+        output = ""
+        for array_name, array in arrays.items():
             output += f"{array_name} = b\"\"\""
-            output += self.__generate_array_contents(arrays[array_name], string_format=True)
+            output += self.__generate_array_contents(array, string_format=True)
             output += "\"\"\"\n\n"
         return output
 
-    def __output_ps1(self, arrays:dict) -> str:
-        """ Private method to output in powershell format.
-        :param arrays: dictionary containing array names and their respective bytes
-        :return output: string containing shellcode in powershell format
-        """
-        # Note: Technically not best to use the triple quotes here but consistency ig
-        # Generate arrays
-        output = str()
-        for array_name in arrays:
+    def __output_ps1(self, arrays: dict) -> str:
+        output = ""
+        for array_name, array in arrays.items():
             output += f"[Byte[]] ${array_name} = "
-            output += self.__generate_array_contents(arrays[array_name])[1:]
+            output += self.__generate_array_contents(array)[1:]
             output += "\n\n"
         return output
 
-    def __output_vba(self, arrays:dict) -> str:
-        """ Private method to output in visual basic application format.
-        :param arrays: dictionary containing array names and their respective bytes
-        :return output: string containing shellcode in visual basic application format
-        """
-        # Generate arrays
-        output = str()
-        # VBA has a maximum line length of 1023 characters, so have to work around that
-        for array_name in arrays:
-            # Array name
+    def __output_vba(self, arrays: dict) -> str:
+        output = ""
+        for array_name, array in arrays.items():
             output += f"{array_name} = Array("
             line_length = len(output)
-            # Array contents
-            array_size = len(arrays[array_name])
-            for i, x in enumerate(arrays[array_name]):
-                if i == array_size - 1:
-                    break
-                # If within 5 bytes, we have enough to write "222,_", which is enough for any value.
+            for i, x in enumerate(array):
                 if line_length + 5 > 1022:
                     output += "_\n"
                     line_length = 0
                 output += f"{x},"
                 line_length += len(f"{x},")
-            # Array end
             if line_length + 4 > 1023:
                 output += "_\n"
             output += f"{x})\n\n"
         return output
 
-    def __output_vbscript(self, arrays:dict) -> str:
-        """ Private method to output in vbscript format.
-        :param arrays: dictionary containing array names and their respective bytes
-        :return output: string containing shellcode in vbscript format
-        """
-        # does not have short line lengths
-        # Generate arrays
-        output = str()
-        for array_name in arrays:
+    def __output_vbscript(self, arrays: dict) -> str:
+        output = ""
+        for array_name, array in arrays.items():
             output += f"{array_name}="
-            output += "".join([f"Chr({str(c)})&" for c in arrays[array_name]])[:-1]
+            output += "".join([f"Chr({str(c)})&" for c in array])[:-1]
             output += "\n\n"
         return output
 
-    def __output_raw(self, arrays:dict) -> str:
-        """ Private method to output shellcode in raw format.
-        :param arrays: dictionary containing array names and their respective bytes
-        :return output: string containing shellcode in raw format
-        """
-        # Grab shellcode
+    def __output_raw(self, arrays: dict) -> str:
         return arrays["sh3llc0d3"]
 
-    def generate(self, output_format:str, arrays:dict) -> str:
-        """ Generates output given the current class configuration
-        :param output_format: Output format to generate e.g. "c" or "csharp"
-        :param shellcode: dictionary containing {"arrayname":array_bytes} pairs
-        :return output: string containing formatted shellcode + key(s)
-        """
-        # Pass execution to the respective handler and return
-        return self.__format_handlers[output_format](arrays)
+    def generate(self, output_format: str, arrays: dict) -> str:
+        """Generates the formatted shellcode based on the output format."""
+        return self.__format_handlers.get(output_format)(arrays)
 
 
 class Encrypt:
@@ -472,7 +356,6 @@ class Encrypt:
 
 class Compress:
     def __init__(self):
-        super(Compress, self).__init__()
         self.__compression_handlers = {
             "lznt": self.__lznt_compress,
             "rle":  self.__rle_compress
@@ -481,49 +364,48 @@ class Compress:
             "lznt": self.__lznt_decompress,
             "rle":  self.__rle_decompress
         }
-        return
 
-    def compress(self, compression: str, data: bytearray) -> bytearray:
-        return self.__compression_handlers[compression](data)
+    def compress(self, method: str, data: bytearray) -> bytearray:
+        """Compress data using specified method."""
+        return self.__compression_handlers.get(method)(data)
 
-    def decompress(self, decompression: str, data: bytearray) -> bytearray:
-        return self.__decompression_handlers[decompression](data)
+    def decompress(self, method: str, data: bytearray) -> bytearray:
+        """Decompress data using specified method."""
+        return self.__decompression_handlers.get(method)(data)
 
     def __lznt_compress(self, data: bytearray) -> bytearray:
+        """LZNT compression."""
         return bytearray(zlib.compress(data))
 
     def __lznt_decompress(self, data: bytearray) -> bytearray:
+        """LZNT decompression."""
         return bytearray(zlib.decompress(data))
 
     def __rle_compress(self, data: bytearray) -> bytearray:
+        """Run-Length Encoding (RLE) compression."""
         compressed = bytearray()
-        count = 1
-        for index in range(1, len(data)):
-            if data[index] == data[index - 1]:
-                count += 1
-            else:
-                compressed.append(data[index-1])
-                compressed.append(count)
-                count = 1
-
-        compressed.append(data[index-1])
-        compressed.append(count)
-        return compressed
-
-    def __rle_decompress(self, data: bytearray) -> bytearray:
-        decompressed = bytearray()
         index = 0
         while index < len(data):
             byte = data[index]
-            count = data[index + 1]
+            count = 1
+            while index + 1 < len(data) and data[index + 1] == byte:
+                count += 1
+                index += 1
+            compressed.extend([byte, count])
+            index += 1
+        return compressed
+
+    def __rle_decompress(self, data: bytearray) -> bytearray:
+        """Run-Length Encoding (RLE) decompression."""
+        decompressed = bytearray()
+        for i in range(0, len(data), 2):
+            byte, count = data[i], data[i + 1]
             decompressed.extend([byte] * count)
-            index += 2
         return decompressed
 
 
 class Encode:
     def __init__(self):
-        super(Encode, self).__init__()
         self.__encoding_handlers = {
             "base64": self.__base64_encode,
             "ascii85": self.__ascii85_encode,
@@ -536,29 +418,36 @@ class Encode:
             "alpha32": self.__alpha32_decode,
             "words256": self.__words256_decode
         }
-        return
 
     def encode(self, encoding: str, data: bytearray) -> bytearray:
-        return self.__encoding_handlers[encoding](data)
+        """Encode data using specified encoding."""
+        handler = self.__encoding_handlers.get(encoding)
+        if handler:
+            return handler(data)
+        raise ValueError(f"Unsupported encoding: {encoding}")
 
     def decode(self, decoding: str, data: bytearray) -> bytearray:
-        return self.__decoding_handlers[decoding](data)
+        """Decode data using specified decoding."""
+        handler = self.__decoding_handlers.get(decoding)
+        if handler:
+            return handler(data)
+        raise ValueError(f"Unsupported decoding: {decoding}")
 
     def __base64_encode(self, data: bytearray) -> bytearray:
-        encoded = base64.b64encode(data)
-        return bytearray(encoded)
+        """Base64 encoding."""
+        return bytearray(base64.b64encode(data))
 
     def __base64_decode(self, data: bytearray) -> bytearray:
-        decoded = base64.b64decode(data)
-        return bytearray(decoded)
+        """Base64 decoding."""
+        return bytearray(base64.b64decode(data))
 
     def __ascii85_encode(self, data: bytearray) -> bytearray:
-        encoded = base64.a85encode(data)
-        return bytearray(encoded)
+        """ASCII85 encoding."""
+        return bytearray(base64.a85encode(data))
 
     def __ascii85_decode(self, data: bytearray) -> bytearray:
-        decoded = base64.a85decode(data)
-        return bytearray(decoded)
+        """ASCII85 decoding."""
+        return bytearray(base64.a85decode(data))
 
     def __alpha32_encode(self, data: bytearray) -> bytearray:
         alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz!#$%&'()*+,-./:;<=>?@[]^_`{|}~"
