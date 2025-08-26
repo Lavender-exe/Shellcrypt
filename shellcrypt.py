@@ -3,7 +3,7 @@
 # In the future will be able to chain encoding/encryption/compression methods.
 # ~ @0xLegacyy (Jordan Jay)
 import argparse
-import zlib
+import lznt1
 import argparse
 import base64
 import logging
@@ -401,11 +401,11 @@ class Compress:
 
     def __lznt_compress(self, data: bytearray) -> bytearray:
         """LZNT compression."""
-        return bytearray(zlib.compress(data))
+        return bytearray(lznt1.compress(data))
 
     def __lznt_decompress(self, data: bytearray) -> bytearray:
         """LZNT decompression."""
-        return bytearray(zlib.decompress(data))
+        return bytearray(lznt1.decompress(data))
 
     def __rle_compress(self, data: bytearray) -> bytearray:
         """Run-Length Encoding (RLE) compression."""
@@ -601,9 +601,12 @@ def validate_and_get_nonce(nonce):
 
 def process_encoding_and_compression(input_bytes, args, encoder, compressor):
     if args.encode:
+        console.print("Encoding Shellcode", style="info")
         input_bytes = encoder.encode(args.encode, input_bytes)
     if args.compress:
+        console.print("Compressing Shellcode", style="info")
         input_bytes = compressor.compress(args.compress, input_bytes)
+    print("")
     return input_bytes
 
 def main():
@@ -668,6 +671,7 @@ def main():
     compressor = Compress()
     encoder = Encode()
 
+    console.print("\nEncrypting Shellcode", style="info")
     input_bytes = cryptor.encrypt(args.encrypt, input_bytes, key, nonce)
     input_bytes = process_encoding_and_compression(input_bytes, args, encoder, compressor)
 
