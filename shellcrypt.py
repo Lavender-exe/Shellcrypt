@@ -599,14 +599,14 @@ def validate_and_get_nonce(nonce):
 
     return bytearray.fromhex(nonce)
 
-def process_encoding_and_compression(input_bytes, args, encoder, compressor):
+def process_encoding(input_bytes, args, encoder, compressor):
     if args.encode:
-        console.print("Encoding Shellcode", style="info")
         input_bytes = encoder.encode(args.encode, input_bytes)
+    return input_bytes
+
+def process_compression(input_bytes, args, encoder, compressor):
     if args.compress:
-        console.print("Compressing Shellcode", style="info")
         input_bytes = compressor.compress(args.compress, input_bytes)
-    print("")
     return input_bytes
 
 def main():
@@ -671,9 +671,14 @@ def main():
     compressor = Compress()
     encoder = Encode()
 
-    console.print("\nEncrypting Shellcode", style="info")
+    logging.info("Compressing Shellcode")
+    input_bytes = process_compression(input_bytes, args, encoder, compressor)
+    
+    logging.info("Encrypting Shellcode")
     input_bytes = cryptor.encrypt(args.encrypt, input_bytes, key, nonce)
-    input_bytes = process_encoding_and_compression(input_bytes, args, encoder, compressor)
+    
+    logging.info("Encoding Shellcode")
+    input_bytes = process_encoding(input_bytes, args, encoder, compressor)
 
     Log.logSuccess(f"Successfully processed input file ({len(input_bytes)} bytes)")
 
