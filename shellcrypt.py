@@ -3,7 +3,6 @@
 # In the future will be able to chain encoding/encryption/compression methods.
 # ~ @0xLegacyy (Jordan Jay)
 import argparse
-import lznt1
 import argparse
 import base64
 import logging
@@ -115,24 +114,29 @@ class Log:
     def __init__(self):
         pass
 
+    @staticmethod
     def logSuccess(msg: str):
         """Logs msg to the terminal with a green [+] appended. Used to show task success."""
         return logger.debug(f"[+] {msg}")
 
+    @staticmethod
     def logInfo(msg: str):
         """Logs msg to the terminal with a blue [*] appended. Used to show task status / info."""
         return logger.info(f"[!] {msg}")
 
+    @staticmethod
     def logDebug(msg: str):
         """Logs msg to the terminal with a magenta [debug] appended. Used for debug info."""
         if DEBUG:
             return logger.debug(f"[+] {msg}")
 
+    @staticmethod
     def logError(msg: str):
         """Logs msg to the terminal with a red [!] appended. Used for error messages."""
         return logger.error(f"[-] {msg}")
 
-    def log_exception(msg: str):
+    @staticmethod
+    def LogException(msg: str):
         """Logs msg to the terminal with a red [!!] appended. Used to show error messages."""
         return logger.exception(f"[!!] {msg}")
 
@@ -286,8 +290,8 @@ class Encrypt:
         return
 
     def __random_key(self) -> int:
-        self.seed = random.randint(0, 2**32 - 1)  
-        
+        self.seed = random.randint(0, 2**32 - 1)
+
         LCG_A = 1664525  # Multiplier
         LCG_C = 1013904223  # Increment
         LCG_M = 2**32  # Modulus (2^32)
@@ -295,7 +299,7 @@ class Encrypt:
         self.seed = (LCG_A * self.seed + LCG_C) % LCG_M
         return self.seed & 0xFF
 
-    def encrypt(self, cipher:str, plaintext:bytearray, key:bytearray, nonce:bytearray = None) -> bytearray:
+    def encrypt(self, cipher:str, plaintext:bytearray, key:bytearray, nonce:bytearray) -> bytearray:
         """ Encrypts plaintext with the user-specified cipher.
             This has been written this way to support chaining of
             multiple encryption methods in the future.
@@ -399,13 +403,71 @@ class Compress:
         """Decompress data using specified method."""
         return self.__decompression_handlers.get(method)(data)
 
+    def __lznt1_compress(self, data: bytes) -> bytes:
+        """Self-contained LZNT1 compressor (LZ77-variant)."""
+        out = bytearray()
+        pos = 0
+        while pos < len(data):
+            flag_bits = 0
+            flag_pos = len(out)          # reserve flag byte
+            out.append(0)
+            for bit in range(8):
+                if pos >= len(data):
+                    break
+                best_len, best_dist = 0, 0
+                max_dist = min(pos, 4096)
+                for dist in range(1, max_dist + 1):
+                    match_len = 0
+                    while (match_len < min(18, len(data) - pos) and
+                        data[pos - dist + match_len] == data[pos + match_len]):
+                        match_len += 1
+                    if match_len >= 3 and match_len > best_len:
+                        best_len, best_dist = match_len, dist
+                if best_len:
+                    # encode match
+                    flag_bits |= (1 << bit)
+                    desc = ((best_len - 3) << 12) | best_dist
+                    out.extend(desc.to_bytes(2, 'little'))
+                    pos += best_len
+                else:
+                    # literal
+                    out.append(data[pos]); pos += 1
+            out[flag_pos] = flag_bits
+        return bytes(out)
+
+    def __lznt1_decompress(self, src: bytes, out_size: int) -> bytes:
+        """Self-contained LZNT1 decompressor."""
+        out = bytearray()
+        pos = 0
+        while pos < len(src) and len(out) < out_size:
+            flags = src[pos]; pos += 1
+            for b in range(8):
+                if pos >= len(src):
+                    break
+                if flags & (1 << b):
+                    out.append(src[pos]); pos += 1
+                else:
+                    if pos + 2 > len(src):
+                        break
+                    desc = int.from_bytes(src[pos:pos+2], 'little'); pos += 2
+                    length = (desc >> 12) + 3
+                    distance = desc & 0xFFF
+                    if distance == 0 or distance > len(out):
+                        out.append(desc & 0xFF); out.append(desc >> 8)
+                    else:
+                        for _ in range(length):
+                            out.append(out[-distance])
+                if len(out) >= out_size:
+                    break
+        return bytes(out[:out_size])
+
     def __lznt_compress(self, data: bytearray) -> bytearray:
         """LZNT compression."""
-        return bytearray(lznt1.compress(data))
+        return bytearray(self.__lznt1_compress(data))
 
     def __lznt_decompress(self, data: bytearray) -> bytearray:
         """LZNT decompression."""
-        return bytearray(lznt1.decompress(data))
+        return bytearray(self.__lznt1_decompress(data, len(data) * 10))
 
     def __rle_compress(self, data: bytearray) -> bytearray:
         """Run-Length Encoding (RLE) compression."""
@@ -524,7 +586,7 @@ def parse_args():
     argparser.add_argument("-i", "--input", help="Path to file to be encrypted.", required=True)
 
     # Encryption related options
-    argparser.add_argument("-e", "--encrypt", default="xor", help="Encryption method to use, default 'xor'.")
+    argparser.add_argument("-e", "--encrypt", default=None, help="Encryption method to use, default None.")
     argparser.add_argument("--decrypt", action="store_true", help="Enable decryption functionality (not yet implemented).")
 
     # Encoding related options
@@ -548,6 +610,7 @@ def parse_args():
 
     # Output file and version
     argparser.add_argument("-o", "--output", help="Path to output file")
+    argparser.add_argument("-a", "--array", default="sh3llc0d3", help="Array Name, default sh3llc0d3")
     argparser.add_argument("-v", "--version", action="store_true", help="Shows the version and exits")
 
     # Additional Features
@@ -599,109 +662,122 @@ def validate_and_get_nonce(nonce):
 
     return bytearray.fromhex(nonce)
 
-def process_encoding(input_bytes, args, encoder, compressor):
+def process_encoding(input_bytes, args, encoder):
     if args.encode:
         input_bytes = encoder.encode(args.encode, input_bytes)
     return input_bytes
 
-def process_compression(input_bytes, args, encoder, compressor):
+def process_compression(input_bytes, args, compressor):
     if args.compress:
         input_bytes = compressor.compress(args.compress, input_bytes)
     return input_bytes
 
+def process_encryption(input_bytes, args, cryptor, key, nonce):
+    if args.encrypt:
+        input_bytes = cryptor.encrypt(args.encrypt, input_bytes, key, nonce)
+    return input_bytes
+
 def main():
-    # Show banner and parse arguments
-    show_banner()
-    args = parse_args()
+    try:
+        # Show banner and parse arguments
+        show_banner()
+        args = parse_args()
 
-    # --------- Info-only arguments ---------
-    if args.formats:
-        print_available_options("formats", OUTPUT_FORMATS)
-    if args.ciphers:
-        print_available_options("ciphers", CIPHERS)
-    if args.encoders:
-        print_available_options("encoders", ENCODING)
-    if args.compressors:
-        print_available_options("compressors", COMPRESSION)
-    if args.version:
-        print(VERSION)
-        exit()
+        # --------- Info-only arguments ---------
+        if args.formats:
+            print_available_options("formats", OUTPUT_FORMATS)
+        if args.ciphers:
+            print_available_options("ciphers", CIPHERS)
+        if args.encoders:
+            print_available_options("encoders", ENCODING)
+        if args.compressors:
+            print_available_options("compressors", COMPRESSION)
+        if args.version:
+            print(VERSION)
+            exit()
 
-    # --------- Argument Validation ---------
-    Log.logDebug(msg="Validating arguments")
+        # --------- Argument Validation ---------
+        Log.logDebug(msg="Validating arguments")
 
-    validate_input_file(args.input)
+        validate_input_file(args.input)
 
-    if args.format not in OUTPUT_FORMATS:
-        Log.logError("Invalid format specified, please specify a valid format e.g. -f c (--formats gives a list of valid formats)")
-        exit()
-    Log.logSuccess(f"Output format: {args.format}")
+        if args.format not in OUTPUT_FORMATS:
+            Log.logError("Invalid format specified, please specify a valid format e.g. -f c (--formats gives a list of valid formats)")
+            exit()
 
-    if args.encrypt not in CIPHERS:
-        Log.logError("Invalid cipher specified, please specify a valid cipher e.g. -e xor (--ciphers gives a list of valid ciphers)")
-        exit()
+        Log.logSuccess(f"Output format: {args.format}")
 
-    if args.encode and args.encode not in ENCODING:
-        Log.logError("Invalid encoder specified, please specify a valid encoder e.g. -d ascii85 (--encoders gives a list of valid encoders)")
-        exit()
+        if args.encrypt and args.encrypt not in CIPHERS:
+            Log.logError("Invalid cipher specified, please specify a valid cipher e.g. -e xor (--ciphers gives a list of valid ciphers)")
+            exit()
 
-    if args.compress and args.compress not in COMPRESSION:
-        Log.logError("Invalid compression specified, please specify a valid compression e.g. -c lznt (--compressors gives a list of valid compressors)")
-        exit()
+        if args.encode and args.encode not in ENCODING:
+            Log.logError("Invalid encoder specified, please specify a valid encoder e.g. -d ascii85 (--encoders gives a list of valid encoders)")
+            exit()
 
-    Log.logSuccess(f"Output Encoding: {args.encode}")
-    Log.logSuccess(f"Output Encryption: {args.encrypt}")
-    Log.logSuccess(f"Output Compression: {args.compress}")
+        if args.compress and args.compress not in COMPRESSION:
+            Log.logError("Invalid compression specified, please specify a valid compression e.g. -c lznt (--compressors gives a list of valid compressors)")
+            exit()
 
-    key = validate_and_get_key(args.key, args.encrypt)
-    Log.logSuccess(f"Using key: {hexlify(key).decode()}")
+        Log.logSuccess(f"Output Compression: {args.compress}")
+        Log.logSuccess(f"Output Encryption: {args.encrypt}")
+        Log.logSuccess(f"Output Encoding: {args.encode}")
 
-    nonce = validate_and_get_nonce(args.nonce)
-    if args.encrypt == "aes":
-        Log.logSuccess(f"Using nonce: {hexlify(nonce).decode()}")
+        key = validate_and_get_key(args.key, args.encrypt)
+        Log.logSuccess(f"Using key: {hexlify(key).decode()}")
 
-    Log.logDebug("Arguments validated")
+        nonce = validate_and_get_nonce(args.nonce)
+        if args.encrypt == "aes":
+            Log.logSuccess(f"Using nonce: {hexlify(nonce).decode()}")
 
-    # --------- Read Input File ---------
-    with open(args.input, "rb") as input_handle:
-        input_bytes = input_handle.read()
+        Log.logDebug("Arguments validated")
 
-    # --------- Input File Processing ---------
-    cryptor = Encrypt()
-    compressor = Compress()
-    encoder = Encode()
+        # --------- Read Input File ---------
+        with open(args.input, "rb") as input_handle:
+            input_bytes = input_handle.read()
 
-    logging.info("Compressing Shellcode")
-    input_bytes = process_compression(input_bytes, args, encoder, compressor)
-    
-    logging.info("Encrypting Shellcode")
-    input_bytes = cryptor.encrypt(args.encrypt, input_bytes, key, nonce)
-    
-    logging.info("Encoding Shellcode")
-    input_bytes = process_encoding(input_bytes, args, encoder, compressor)
+        # --------- Input File Processing ---------
+        cryptor = Encrypt()
+        compressor = Compress()
+        encoder = Encode()
 
-    Log.logSuccess(f"Successfully processed input file ({len(input_bytes)} bytes)")
+        if args.compress:
+            logging.info("Compressing Shellcode")
+            input_bytes = process_compression(input_bytes, args, compressor)
 
-    # --------- Output Generation ---------
-    arrays = {"key": key}
-    if args.encrypt in ["aes_128", "aes_ecb", "aes_cbc"]:
-        arrays["nonce"] = nonce
-    arrays["sh3llc0d3"] = input_bytes
+        if args.encrypt:
+            logging.info("Encrypting Shellcode")
+            input_bytes = process_encryption(input_bytes, args, cryptor, key, nonce)
 
-    # Generate formatted output
-    shellcode_formatter = ShellcodeFormatter()
-    output = shellcode_formatter.generate(args.format, arrays)
+        if args.encode:
+            logging.info("Encoding Shellcode")
+            input_bytes = process_encoding(input_bytes, args, encoder)
 
-    # --------- Output ---------
-    if args.output is None:
-        console.print(output.decode("latin1") if isinstance(output, bytearray) else output)
-        exit()
+        Log.logSuccess(f"Successfully processed input file ({len(input_bytes)} bytes)")
 
-    write_mode = "wb" if isinstance(output, bytearray) else "w"
-    with open(args.output, write_mode) as file_handle:
-        file_handle.write(output)
+        # --------- Output Generation ---------
+        arrays = {"key": key}
+        if args.encrypt and args.encrypt in ["aes_128", "aes_ecb", "aes_cbc"]:
+            arrays["nonce"] = nonce
+        arrays[args.array] = input_bytes
 
-    Log.logSuccess(f"Output written to '{args.output}'")
+        # Generate formatted output
+        shellcode_formatter = ShellcodeFormatter()
+        output = shellcode_formatter.generate(args.format, arrays)
+
+        # --------- Output ---------
+        if args.output is None:
+            console.print(output.decode("latin1") if isinstance(output, bytearray) else output)
+            exit()
+
+        write_mode = "wb" if isinstance(output, bytearray) else "w"
+        with open(args.output, write_mode) as file_handle:
+            file_handle.write(output)
+
+        Log.logSuccess(f"Output written to '{args.output}'")
+
+    except Exception as e:
+        Log.LogException(f"Exception Caught: {e}")
 
 if __name__ == "__main__":
     main()

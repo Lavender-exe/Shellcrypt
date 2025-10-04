@@ -10,3 +10,4 @@ dist/
 build/
 .idea/
 logs
+.vscode
