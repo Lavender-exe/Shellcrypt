@@ -1,29 +1,27 @@
-# Shellcraft
-# A QoL tool to obfuscate shellcode.
-# In the future will be able to chain encoding/encryption/compression methods.
-# ~ @0xLegacyy (Jordan Jay)
+"""
+~ @0xLegacyy (Jordan Jay)
+
+Shellcrypt: Quality of Life Shellcode Obfuscation Tool
+
+/ - Shellcrypt.py  : Main Program
+/utils/
+    - /crypters.py : Encryption, Encoding & Compression Toolkit
+    - /winapi.py   : LZNT1 Compression WinAPI Helper
+    - /logging.py  : Logging Helper
+"""
 import argparse
-import argparse
-import base64
 import logging
-import os
 import pyfiglet
-import random
 
 from rich.console import Console
 from rich.theme import Theme
-from rich.logging import RichHandler
-
 from binascii import hexlify
-from itertools import cycle
 from os import urandom
 from os.path import isfile
 from string import hexdigits
 
-from Crypto.Cipher import AES, ARC4, ChaCha20, Salsa20
-from Crypto.Util.Padding import pad
-from Crypto.Random import get_random_bytes
-
+from utils.crypters import Encode, Encrypt, Compress, ShellcodeFormatter
+from utils.logging import Log
 
 theme = Theme({
     "success" : "spring_green3",
@@ -32,34 +30,6 @@ theme = Theme({
     "exception" : "red",
 })
 console = Console(theme=theme, color_system="auto")
-
-DEBUG = False
-
-log_path = "logs"
-debug_path = "logs/debug_logs.log"
-session_path = "logs/session_logs.log"
-if not os.path.exists(log_path):
-    os.mkdir(log_path)
-
-if not os.path.exists(debug_path):
-    with open(debug_path, 'w'): pass
-
-if not os.path.exists(session_path):
-    with open(session_path, 'w'): pass
-
-logging.basicConfig(
-    level="DEBUG",
-    format="%(message)s",
-    datefmt="[%X]",
-    handlers=[
-        RichHandler(rich_tracebacks=True),
-        logging.FileHandler(debug_path, mode='a', encoding="utf-8"),
-        logging.FileHandler(session_path, mode='w', encoding="utf-8"),
-    ],
-)
-
-logger = logging.getLogger("rich")
-
 
 # global vars
 OUTPUT_FORMATS = [
@@ -107,474 +77,6 @@ def show_banner():
     banner = pyfiglet.figlet_format("Shellcrypt", font="slant", justify="left")
     console.print(f"[bold yellow]{banner}{VERSION}\n[/bold yellow]")
     console.print("By: @0xLegacyy (Jordan Jay)\n", style="green4")
-
-
-class Log:
-    """Handles all styled terminal output."""
-    def __init__(self):
-        pass
-
-    @staticmethod
-    def logSuccess(msg: str):
-        """Logs msg to the terminal with a green [+] appended. Used to show task success."""
-        return logger.debug(f"[+] {msg}")
-
-    @staticmethod
-    def logInfo(msg: str):
-        """Logs msg to the terminal with a blue [*] appended. Used to show task status / info."""
-        return logger.info(f"[!] {msg}")
-
-    @staticmethod
-    def logDebug(msg: str):
-        """Logs msg to the terminal with a magenta [debug] appended. Used for debug info."""
-        if DEBUG:
-            return logger.debug(f"[+] {msg}")
-
-    @staticmethod
-    def logError(msg: str):
-        """Logs msg to the terminal with a red [!] appended. Used for error messages."""
-        return logger.error(f"[-] {msg}")
-
-    @staticmethod
-    def LogException(msg: str):
-        """Logs msg to the terminal with a red [!!] appended. Used to show error messages."""
-        return logger.exception(f"[!!] {msg}")
-
-
-class ShellcodeFormatter:
-    """Generates shellcode output in various formats."""
-    def __init__(self):
-        self.__format_handlers = {
-            "c": self.__output_c,
-            "csharp": self.__output_csharp,
-            "nim": self.__output_nim,
-            "go": self.__output_go,
-            "py": self.__output_py,
-            "ps1": self.__output_ps1,
-            "vba": self.__output_vba,
-            "vbscript": self.__output_vbscript,
-            "raw": self.__output_raw,
-            "rust": self.__output_rust,
-            "js": self.__output_js,
-            "zig": self.__output_zig
-        }
-
-    def __generate_array_contents(self, input_bytes: bytearray, string_format=False) -> str:
-        """Generates formatted shellcode from bytearray."""
-        output = ""
-        if not string_format:
-            for i in range(len(input_bytes) - 1):
-                if i % 15 == 0:
-                    output += "\n\t"
-                output += f"0x{input_bytes[i]:0>2x},"
-            output += f"0x{input_bytes[-1]:0>2x}"
-            return output[1:]
-        else:
-            for i in range(len(input_bytes) - 1):
-                if i % 15 == 0:
-                    output += "\n"
-                output += f"\\x{input_bytes[i]:0>2x}"
-            output += f"\\x{input_bytes[-1]:0>2x}"
-            return output[1:]
-
-    def __output_format(self, arrays: dict, template: str, array_format="unsigned char") -> str:
-        """Generate shellcode in specified format."""
-        output = ""
-        for array_name, array in arrays.items():
-            output += f"{array_format} {array_name}[{len(array)}] = {{\n"
-            output += self.__generate_array_contents(array)
-            output += "\n};\n\n"
-        return output
-
-    def __output_c(self, arrays: dict) -> str:
-        return self.__output_format(arrays, "c")
-
-    def __output_rust(self, arrays: dict) -> str:
-        return self.__output_format(arrays, "rust", array_format="let")
-
-    def __output_csharp(self, arrays: dict) -> str:
-        return self.__output_format(arrays, "csharp", array_format="byte[]")
-
-    def __output_nim(self, arrays: dict) -> str:
-        output = ""
-        for array_name, array in arrays.items():
-            output += f"var {array_name}: array[{len(array)}, byte] = [\n"
-            output += "\tbyte " + self.__generate_array_contents(array)[1:]
-            output += "\n]\n\n"
-        return output
-
-    def __output_go(self, arrays: dict) -> str:
-        return self.__output_format(arrays, "go", array_format="[]byte")
-
-    def __output_py(self, arrays: dict) -> str:
-        output = ""
-        for array_name, array in arrays.items():
-            output += f"{array_name} = b\"\"\""
-            output += self.__generate_array_contents(array, string_format=True)
-            output += "\"\"\"\n\n"
-        return output
-
-    def __output_ps1(self, arrays: dict) -> str:
-        output = ""
-        for array_name, array in arrays.items():
-            output += f"[Byte[]] ${array_name} = "
-            output += self.__generate_array_contents(array)[1:]
-            output += "\n\n"
-        return output
-
-    def __output_vba(self, arrays: dict) -> str:
-        output = ""
-        for array_name, array in arrays.items():
-            output += f"{array_name} = Array("
-            line_length = len(output)
-            for i, x in enumerate(array):
-                if line_length + 5 > 1022:
-                    output += "_\n"
-                    line_length = 0
-                output += f"{x},"
-                line_length += len(f"{x},")
-            if line_length + 4 > 1023:
-                output += "_\n"
-            output += f"{x})\n\n"
-        return output
-
-    def __output_vbscript(self, arrays: dict) -> str:
-        output = ""
-        for array_name, array in arrays.items():
-            output += f"{array_name}="
-            output += "".join([f"Chr({str(c)})&" for c in array])[:-1]
-            output += "\n\n"
-        return output
-
-    def __output_js(self, arrays: dict) -> str:
-        """JavaScript output."""
-        output = ""
-        for array_name, array in arrays.items():
-            output += f"const {array_name} = new Uint8Array({len(array)}); \n"
-            output += f"{array_name}.set(["
-            output += self.__generate_array_contents(array)
-            output += "]);\n\n"
-        return output
-
-    def __output_zig(self, arrays: dict) -> str:
-        """Zig output."""
-        output = ""
-        for array_name, array in arrays.items():
-            output += f"var {array_name} = []u8{{\n"
-            output += self.__generate_array_contents(array)
-            output += "\n};\n\n"
-        return output
-
-    def __output_raw(self, arrays: dict) -> str:
-        return arrays["sh3llc0d3"]
-
-    def generate(self, output_format: str, arrays: dict) -> str:
-        """Generates the formatted shellcode based on the output format."""
-        return self.__format_handlers.get(output_format)(arrays)
-
-
-class Encrypt:
-    """ Consolidates encryption into a single class. """
-    def __init__(self):
-        super(Encrypt, self).__init__()
-        self.__encryption_handlers = {
-            "xor":         self.__xor,
-            "xor_complex": self.__xor_complex,
-            "aes_128":     self.__aes_128,
-            "aes_ecb":     self.__aes_ecb,
-            "aes_cbc":     self.__aes_cbc,
-            "rc4":         self.__rc4,
-            "chacha20":    self.__chacha20,
-            "salsa20":     self.__salsa20
-        }
-        return
-
-    def __random_key(self) -> int:
-        self.seed = random.randint(0, 2**32 - 1)
-
-        LCG_A = 1664525  # Multiplier
-        LCG_C = 1013904223  # Increment
-        LCG_M = 2**32  # Modulus (2^32)
-
-        self.seed = (LCG_A * self.seed + LCG_C) % LCG_M
-        return self.seed & 0xFF
-
-    def encrypt(self, cipher:str, plaintext:bytearray, key:bytearray, nonce:bytearray) -> bytearray:
-        """ Encrypts plaintext with the user-specified cipher.
-            This has been written this way to support chaining of
-            multiple encryption methods in the future.
-        :param cipher: cipher to use, e.g. 'xor'/'aes'
-        :param plaintext: bytearray containing our plaintext
-        :param key: bytearray containing our encryption key
-        :param nonce: bytearray containing nonce for aes etc.
-                      if none will be generated on the fly
-        :return ciphertext: bytearray containing encrypted plaintext
-        """
-        # If nonce not specified, generate one, otherwise use the specified one.
-        self.nonce = urandom(16) if nonce is None else nonce
-        self.key = key
-        # cipher is already validated (check argument validation section).
-        return self.__encryption_handlers[cipher](plaintext)
-
-    def __xor(self, plaintext:bytearray) -> bytearray:
-        """ Private method to encrypt the input plaintext with a repeating XOR key.
-        :param plaintext: bytearray containing our plaintext
-        :return ciphertext: bytearray containing encrypted plaintext
-        """
-        return bytearray(a ^ b for (a, b) in zip(plaintext, cycle(self.key)))
-
-    def __xor_complex(self, plaintext: bytearray) -> bytearray:
-        """
-        XOR Encrypts/Decrypts given shellcode using a Linear Congruential Generator (LCG)
-        """
-        encrypted_shellcode = bytearray()
-        for byte in plaintext:
-            random_key = self.__random_key()
-            encrypted_shellcode.append(byte ^ random_key)
-
-        return encrypted_shellcode
-
-    def __aes_128(self, plaintext:bytearray) -> bytearray:
-        """ Private method to encrypt the input plaintext with AES-128 in CBC mode.
-        :param plaintext: bytearray containing plaintext
-        :return ciphertext: bytearray containing encrypted plaintext
-        """
-        aes_cipher = AES.new(self.key, AES.MODE_CBC, self.nonce)
-        plaintext = pad(plaintext, 16)
-        return bytearray(aes_cipher.encrypt(plaintext))
-
-    def __rc4(self, plaintext:bytearray) -> bytearray:
-        """ Private method to encrypt the input plaintext via RC4.
-        :param plaintext: bytearray containing plaintext
-        :return ciphertext: bytearray containing encrypted plaintext
-        """
-        rc4_cipher = ARC4.new(self.key)
-        return rc4_cipher.encrypt(plaintext)
-
-    def __chacha20(self, plaintext:bytearray) -> bytearray:
-        """ Private method to encrypt the input plaintext via ChaCha20.
-        :param plaintext: bytearray containing plaintext
-        :return ciphertext: bytearray containing encrypted plaintext
-        """
-        chacha20_cipher = ChaCha20.new(key=self.key)
-        return chacha20_cipher.encrypt(plaintext)
-
-    def __salsa20(self, plaintext:bytearray) -> bytearray:
-        """ Private method to encrypt the input plaintext via Salsa20.
-        :param plaintext: bytearray containing plaintext
-        :return ciphertext: bytearray containing encrypted plaintext
-        """
-        salsa20_cipher = Salsa20.new(key=self.key)
-        return salsa20_cipher.encrypt(plaintext)
-
-    def __aes_ecb(self, plaintext:bytearray) -> bytearray:
-        cipher = AES.new(self.key, AES.MODE_ECB)
-        padding_length = 16 - len(plaintext) % 16
-        padded_shellcode = plaintext + bytearray([padding_length] * padding_length)
-        return cipher.encrypt(padded_shellcode)
-
-    def __aes_cbc(self, plaintext:bytearray) -> bytearray:
-        iv = get_random_bytes(16)
-        cipher = AES.new(self.key, AES.MODE_CBC, iv)
-
-        padding_length = 16 - len(plaintext) % 16
-        padded_shellcode = plaintext + bytearray([padding_length] * padding_length)
-
-        encrypted_shellcode = cipher.encrypt(padded_shellcode)
-        return bytearray(iv) + bytearray(encrypted_shellcode)
-
-
-class Compress:
-    def __init__(self):
-        self.__compression_handlers = {
-            "lznt": self.__lznt_compress,
-            "rle":  self.__rle_compress
-        }
-        self.__decompression_handlers = {
-            "lznt": self.__lznt_decompress,
-            "rle":  self.__rle_decompress
-        }
-
-    def compress(self, method: str, data: bytearray) -> bytearray:
-        """Compress data using specified method."""
-        return self.__compression_handlers.get(method)(data)
-
-    def decompress(self, method: str, data: bytearray) -> bytearray:
-        """Decompress data using specified method."""
-        return self.__decompression_handlers.get(method)(data)
-
-    def __lznt1_compress(self, data: bytes) -> bytes:
-        """Self-contained LZNT1 compressor (LZ77-variant)."""
-        out = bytearray()
-        pos = 0
-        while pos < len(data):
-            flag_bits = 0
-            flag_pos = len(out)          # reserve flag byte
-            out.append(0)
-            for bit in range(8):
-                if pos >= len(data):
-                    break
-                best_len, best_dist = 0, 0
-                max_dist = min(pos, 4096)
-                for dist in range(1, max_dist + 1):
-                    match_len = 0
-                    while (match_len < min(18, len(data) - pos) and
-                        data[pos - dist + match_len] == data[pos + match_len]):
-                        match_len += 1
-                    if match_len >= 3 and match_len > best_len:
-                        best_len, best_dist = match_len, dist
-                if best_len:
-                    # encode match
-                    flag_bits |= (1 << bit)
-                    desc = ((best_len - 3) << 12) | best_dist
-                    out.extend(desc.to_bytes(2, 'little'))
-                    pos += best_len
-                else:
-                    # literal
-                    out.append(data[pos]); pos += 1
-            out[flag_pos] = flag_bits
-        return bytes(out)
-
-    def __lznt1_decompress(self, src: bytes, out_size: int) -> bytes:
-        """Self-contained LZNT1 decompressor."""
-        out = bytearray()
-        pos = 0
-        while pos < len(src) and len(out) < out_size:
-            flags = src[pos]; pos += 1
-            for b in range(8):
-                if pos >= len(src):
-                    break
-                if flags & (1 << b):
-                    out.append(src[pos]); pos += 1
-                else:
-                    if pos + 2 > len(src):
-                        break
-                    desc = int.from_bytes(src[pos:pos+2], 'little'); pos += 2
-                    length = (desc >> 12) + 3
-                    distance = desc & 0xFFF
-                    if distance == 0 or distance > len(out):
-                        out.append(desc & 0xFF); out.append(desc >> 8)
-                    else:
-                        for _ in range(length):
-                            out.append(out[-distance])
-                if len(out) >= out_size:
-                    break
-        return bytes(out[:out_size])
-
-    def __lznt_compress(self, data: bytearray) -> bytearray:
-        """LZNT compression."""
-        return bytearray(self.__lznt1_compress(data))
-
-    def __lznt_decompress(self, data: bytearray) -> bytearray:
-        """LZNT decompression."""
-        return bytearray(self.__lznt1_decompress(data, len(data) * 10))
-
-    def __rle_compress(self, data: bytearray) -> bytearray:
-        """Run-Length Encoding (RLE) compression."""
-        compressed = bytearray()
-        index = 0
-        while index < len(data):
-            byte = data[index]
-            count = 1
-            while index + 1 < len(data) and data[index + 1] == byte:
-                count += 1
-                index += 1
-            compressed.extend([byte, count])
-            index += 1
-        return compressed
-
-    def __rle_decompress(self, data: bytearray) -> bytearray:
-        """Run-Length Encoding (RLE) decompression."""
-        decompressed = bytearray()
-        for i in range(0, len(data), 2):
-            byte, count = data[i], data[i + 1]
-            decompressed.extend([byte] * count)
-        return decompressed
-
-
-class Encode:
-    def __init__(self):
-        self.__encoding_handlers = {
-            "base64": self.__base64_encode,
-            "ascii85": self.__ascii85_encode,
-            "alpha32": self.__alpha32_encode,
-            "words256": self.__words256_encode
-        }
-        self.__decoding_handlers = {
-            "base64": self.__base64_decode,
-            "ascii85": self.__ascii85_decode,
-            "alpha32": self.__alpha32_decode,
-            "words256": self.__words256_decode
-        }
-
-    def encode(self, encoding: str, data: bytearray) -> bytearray:
-        """Encode data using specified encoding."""
-        handler = self.__encoding_handlers.get(encoding)
-        if handler:
-            return handler(data)
-        raise ValueError(f"Unsupported encoding: {encoding}")
-
-    def decode(self, decoding: str, data: bytearray) -> bytearray:
-        """Decode data using specified decoding."""
-        handler = self.__decoding_handlers.get(decoding)
-        if handler:
-            return handler(data)
-        raise ValueError(f"Unsupported decoding: {decoding}")
-
-    def __base64_encode(self, data: bytearray) -> bytearray:
-        """Base64 encoding."""
-        return bytearray(base64.b64encode(data))
-
-    def __base64_decode(self, data: bytearray) -> bytearray:
-        """Base64 decoding."""
-        return bytearray(base64.b64decode(data))
-
-    def __ascii85_encode(self, data: bytearray) -> bytearray:
-        """ASCII85 encoding."""
-        return bytearray(base64.a85encode(data))
-
-    def __ascii85_decode(self, data: bytearray) -> bytearray:
-        """ASCII85 decoding."""
-        return bytearray(base64.a85decode(data))
-
-    def __alpha32_encode(self, data: bytearray) -> bytearray:
-        alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz!#$%&'()*+,-./:;<=>?@[]^_`{|}~"
-        encoded = bytearray()
-        for byte in data:
-            encoded.extend(alphabet[byte % len(alphabet)].encode())
-        return encoded
-
-    def __alpha32_decode(self, data: bytearray) -> bytearray:
-        alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz!#$%&'()*+,-./:;<=>?@[]^_`{|}~"
-        decoded = bytearray()
-        for char in data:
-            decoded.append(alphabet.index(chr(char)))
-        return decoded
-
-    def __words256_encode(self, data: bytearray) -> bytearray:
-        words = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot",
-                "Golf", "Hotel", "India", "Juliet", "Kilo", "Lima", "Mike",
-                "November", "Oscar", "Papa", "Quebec", "Romeo", "Sierra", "Tango",
-                "Uniform", "Victor", "Whiskey", "X-ray", "Yankee", "Zulu"]
-        encoded = bytearray()
-        for byte in data:
-            encoded.extend(words[byte % len(words)].encode() + b" ")
-        return encoded
-
-    def __words256_decode(self, data: bytearray) -> bytearray:
-        words = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot",
-                "Golf", "Hotel", "India", "Juliet", "Kilo", "Lima", "Mike",
-                "November", "Oscar", "Papa", "Quebec", "Romeo", "Sierra", "Tango",
-                "Uniform", "Victor", "Whiskey", "X-ray", "Yankee", "Zulu"]
-        decoded = bytearray()
-        word = b""
-        for byte in data:
-            word += bytes([byte])
-            if word.endswith(b" "):  # Word boundary (space)
-                decoded.append(words.index(word.decode().strip()))
-                word = b""
-        return decoded
-
 
 def parse_args():
     # Parse arguments with additional features
@@ -631,7 +133,8 @@ def print_available_options(option_type, options, exit_on_print=True):
 
 def validate_input_file(input_file):
     if input_file is None:
-        Log.logError("Must specify an input file e.g. -i shellcode.bin (specify --help for more info)")
+        Log.logError("""Must specify an input file e.g.
+                     -i shellcode.bin (specify --help for more info)""")
         exit()
     if not isfile(input_file):
         Log.logError(f"Input file '{input_file}' does not exist.")
@@ -702,21 +205,25 @@ def main():
         validate_input_file(args.input)
 
         if args.format not in OUTPUT_FORMATS:
-            Log.logError("Invalid format specified, please specify a valid format e.g. -f c (--formats gives a list of valid formats)")
+            Log.logError("""Invalid format specified, please specify a valid format e.g.
+                         -f c (--formats gives a list of valid formats)""")
             exit()
 
         Log.logSuccess(f"Output format: {args.format}")
 
         if args.encrypt and args.encrypt not in CIPHERS:
-            Log.logError("Invalid cipher specified, please specify a valid cipher e.g. -e xor (--ciphers gives a list of valid ciphers)")
+            Log.logError("""Invalid cipher specified, please specify a valid cipher e.g.
+                         -e xor (--ciphers gives a list of valid ciphers)""")
             exit()
 
         if args.encode and args.encode not in ENCODING:
-            Log.logError("Invalid encoder specified, please specify a valid encoder e.g. -d ascii85 (--encoders gives a list of valid encoders)")
+            Log.logError("""Invalid encoder specified, please specify a valid encoder e.g.
+                         -d ascii85 (--encoders gives a list of valid encoders)""")
             exit()
 
         if args.compress and args.compress not in COMPRESSION:
-            Log.logError("Invalid compression specified, please specify a valid compression e.g. -c lznt (--compressors gives a list of valid compressors)")
+            Log.logError("""Invalid compression specified, please specify a valid compression e.g.
+                         -c lznt (--compressors gives a list of valid compressors)""")
             exit()
 
         Log.logSuccess(f"Output Compression: {args.compress}")
@@ -753,7 +260,7 @@ def main():
             logging.info("Encoding Shellcode")
             input_bytes = process_encoding(input_bytes, args, encoder)
 
-        Log.logSuccess(f"Successfully processed input file ({len(input_bytes)} bytes)")
+        Log.logSuccess(f"Successfully processed input file ({len(input_bytes)} bytes)\n")
 
         # --------- Output Generation ---------
         arrays = {"key": key}
