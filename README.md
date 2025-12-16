@@ -3,15 +3,18 @@
 A single-file cross-platform quality of life tool to obfuscate a given shellcode file and output in a useful format for pasting directly into your source code.
 
 ![Screenshot of Shellcrypt encrypting shellcode](https://i.imgur.com/DavG7ad.png)
+![Screenshot of Shellcrypt encrypting, encoding, and compressing shellcode](./assets/Shellcrypt%20Demo.png)
 
-## Contributors
+# Contributors
 
 These are going here because they deserve it
 - An00bRektn [github](https://github.com/An00bRektn) [twitter](https://twitter.com/An00bRektn) ♥
 - 0xtejas [github](https://github.com/0xtejas)
-- Lavender-exe [github](https://github.com/Lavender-exe)
+- Lavender-exe [github](https://github.com/Lavender-exe) 💜
 
-## Encryption Methods
+# Shellcode Conversions
+## Crypters
+### Encryption
 
 Shellcrypt currently supports the following encryption methods (more to come in the future!)
 
@@ -23,6 +26,18 @@ Shellcrypt currently supports the following encryption methods (more to come in 
 - Salsa20
 - XOR
 - XOR with Linear Congruential Generator (LCG)
+
+### Encoding
+
+- Alpha32
+- Ascii85
+- Base64
+- Words256
+
+### Compression
+
+- LZNT1 (Windows Only)
+- RLE
 
 ## Supported Formats
 
@@ -41,7 +56,7 @@ Shellcrypt currently supports the following output formats (more to come in the 
 - Zig
 - Raw
 
-## Usage 
+# Usage Information
 **Encrypt shellcode with a random key**
 ```bash
 python ./shellcrypt.py -i ./shellcode.bin -f c
