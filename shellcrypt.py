@@ -260,7 +260,8 @@ def main():
             logging.info("Encoding Shellcode")
             input_bytes = process_encoding(input_bytes, args, encoder)
 
-        Log.logSuccess(f"Successfully processed input file ({len(input_bytes)} bytes)\n")
+        Log.logSuccess(f"Successfully processed input file ({len(input_bytes)} bytes)")
+        Log.logInfo("Deobfuscation Routine: Decode -> Decrypt -> Decompress\n")
 
         # --------- Output Generation ---------
         arrays = {"key": key}
