@@ -65,13 +65,17 @@ python ./shellcrypt.py -i ./shellcode.bin -f c
 ```bash
 python ./shellcrypt.py -i ./shellcode.bin -e aes -f c
 ```
+**Encrypt shellcode with XOR and LZNT1 Compression**
+```bash
+python .\shellcrypt.py -i '.\test\shellcode.bin' -f c -a shellcode -e xor -k 4141 -c lznt
+```
 **Encrypt shellcode with a user-specified key**
 ```bash
 python ./shellcrypt.py -i ./shellcode.bin -f c -k 6d616c77617265
 ```
-**Output in nim format**
+**Output in nim format with an array name of "shellcode"**
 ```bash
-python ./shellcrypt.py -i ./shellcode.bin -f nim
+python ./shellcrypt.py -i ./shellcode.bin -f nim -a shellcode
 ```
 **Output to file**
 ```bash
@@ -106,15 +110,15 @@ v2.0 - Release
 
 By: @0xLegacyy (Jordan Jay)
 
-usage: shellcrypt [-h] -i INPUT [-e ENCRYPT] [--decrypt] [-d ENCODE] [-c COMPRESS] [-k KEY] [-n NONCE] [-f FORMAT] [--formats] [--ciphers] [--encoders] [--compressors] [-o OUTPUT] [-v] [--preserve-null]
-                  [--key-length KEY_LENGTH]
+usage: shellcrypt [-h] -i INPUT [-e ENCRYPT] [--decrypt] [-d ENCODE] [-c COMPRESS] [-k KEY] [-n NONCE] [-f FORMAT] [--formats] [--ciphers] [--encoders] [--compressors] [-o OUTPUT] [-a ARRAY] [-v]
+                  [--preserve-null] [--key-length KEY_LENGTH]
 
 options:
   -h, --help            show this help message and exit
   -i INPUT, --input INPUT
                         Path to file to be encrypted.
   -e ENCRYPT, --encrypt ENCRYPT
-                        Encryption method to use, default 'xor'.
+                        Encryption method to use, default None.
   --decrypt             Enable decryption functionality (not yet implemented).
   -d ENCODE, --encode ENCODE
                         Encoding method to use, default None.
@@ -131,6 +135,8 @@ options:
   --compressors         Show a list of valid compressors
   -o OUTPUT, --output OUTPUT
                         Path to output file
+  -a ARRAY, --array ARRAY
+                        Array Name, default sh3llc0d3
   -v, --version         Shows the version and exits
   --preserve-null       Avoid XORing null bytes during XOR encryption.
   --key-length KEY_LENGTH
