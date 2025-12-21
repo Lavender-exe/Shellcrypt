@@ -2,3 +2,4 @@
 pycryptodome
 argparse
 pyfiglet
+lznt1
