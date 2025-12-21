@@ -1,5 +1,6 @@
 import base64
 import random
+import lznt1
 
 from os import urandom
 from Crypto.Cipher import AES, ARC4, ChaCha20, Salsa20
@@ -7,10 +8,6 @@ from Crypto.Util.Padding import pad
 from Crypto.Random import get_random_bytes
 
 from itertools import cycle
-from utils.winapi import (
-    RtlGetCompressionWorkSpaceSize, RtlCompressBuffer, RtlDecompressBuffer,
-    COMPRESSION_FORMAT_AND_ENGINE, COMPRESSION_FORMAT_LZNT1, ctypes, wintypes,
-)
 
 
 class ShellcodeFormatter:
@@ -284,60 +281,11 @@ class Compress:
 
     def __lznt_compress(self, data: bytes) -> bytes:
         """LZNT compression via RtlCompressBuffer (LZNT1 + MAXIMUM engine)."""
-        ws_size = wintypes.ULONG()
-        frag_sz = wintypes.ULONG()
-
-        status = RtlGetCompressionWorkSpaceSize(
-            COMPRESSION_FORMAT_AND_ENGINE,
-            ctypes.byref(ws_size),
-            ctypes.byref(frag_sz),
-        )
-
-        if status != 0:
-            raise OSError(f"RtlGetCompressionWorkSpaceSize failed: 0x{status:08x}")
-
-        workspace = (ctypes.c_ubyte * ws_size.value)()
-
-        compressed_buffer_sz = len(data) + ((len(data) - 1) // 16) + 64
-        compressed_buffer = (ctypes.c_ubyte * compressed_buffer_sz)()
-        uncompressed_chunk_size = wintypes.ULONG(4096)
-
-        final_size = wintypes.ULONG()
-
-        status = RtlCompressBuffer(
-            COMPRESSION_FORMAT_AND_ENGINE,
-            (ctypes.c_ubyte * len(data)).from_buffer_copy(data),
-            len(data),
-            compressed_buffer,
-            compressed_buffer_sz,
-            uncompressed_chunk_size,
-            ctypes.byref(final_size),
-            workspace,
-        )
-
-        if status != 0:
-            raise OSError(f"RtlCompressBuffer failed: 0x{status:08x}")
-
-        return bytes(compressed_buffer[:final_size.value])
+        return bytearray(lznt1.compress(data))
 
     def __lznt_decompress(self, data: bytes) -> bytes:
         """LZNT decompression via RtlDecompressBuffer."""
-        dst_sz = len(data) * 10
-        dst_buf = (ctypes.c_ubyte * dst_sz)()
-        final_sz = wintypes.ULONG()
-
-        status = RtlDecompressBuffer(
-            COMPRESSION_FORMAT_LZNT1,
-            dst_buf,
-            dst_sz,
-            (ctypes.c_ubyte * len(data)).from_buffer_copy(data),
-            len(data),
-            ctypes.byref(final_sz),
-        )
-        if status != 0:
-            raise OSError(f"RtlDecompressBuffer failed: 0x{status:08x}")
-
-        return bytes(dst_buf[:final_sz.value])
+        return bytearray(lznt1.decompress(data))
 
     def __rle_compress(self, data: bytearray) -> bytearray:
         compressed = bytearray()
